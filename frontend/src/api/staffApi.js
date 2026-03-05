@@ -30,3 +30,6 @@ export const getHoursMe = (params = {}) =>
 
 export const addHoursMe = (entry) =>
   axios.post(`${API}/hours/me`, entry, { headers: getAuthHeader() });
+
+export const getWeeklySummary = (params = {}) =>
+  axios.get(`${API}/api/ai/weekly-summary`, { params, headers: getAuthHeader() });

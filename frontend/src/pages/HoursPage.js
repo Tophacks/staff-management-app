@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getStaff, getHours, addHours, patchHours } from "../api/staffApi";
+import { getStaff, getHours, addHours, patchHours, getWeeklySummary } from "../api/staffApi";
 
 export default function HoursPage() {
   const [staff, setStaff] = useState([]);
@@ -13,9 +13,30 @@ export default function HoursPage() {
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [error, setError] = useState("");
+  const [summary, setSummary] = useState("");
+  const [summaryData, setSummaryData] = useState([]);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   useEffect(() => {
     loadStaff();
+  }, []);
+
+  useEffect(() => {
+    const loadSummary = async () => {
+      setSummaryLoading(true);
+      setSummaryError("");
+      try {
+        const res = await getWeeklySummary();
+        setSummary(res.data.summary || "");
+        setSummaryData(res.data.data || []);
+      } catch (err) {
+        setSummaryError(err.response?.data?.error || "Failed to load AI summary");
+      } finally {
+        setSummaryLoading(false);
+      }
+    };
+    loadSummary();
   }, []);
 
   useEffect(() => {
@@ -79,7 +100,7 @@ export default function HoursPage() {
     }
     try {
       await addHours({
-        staffId: Number(staffId),
+        staffId: String(staffId),
         date,
         hours: Number(hours),
         notes,
@@ -97,6 +118,37 @@ export default function HoursPage() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Hours Tracking (Management)</h1>
+
+      <section style={{ marginBottom: 24, padding: 16, background: "#f8f9fa", borderRadius: 8, border: "1px solid #dee2e6" }}>
+        <h2 style={{ marginTop: 0 }}>AI Weekly Summary</h2>
+        {summaryLoading && <p style={{ color: "#666" }}>Loading summary…</p>}
+        {summaryError && <p style={{ color: "crimson" }}>{summaryError}</p>}
+        {!summaryLoading && !summaryError && summary && (
+          <p style={{ whiteSpace: "pre-wrap", margin: "0 0 12px 0" }}>{summary}</p>
+        )}
+        {!summaryLoading && summaryData.length > 0 && (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #dee2e6" }}>
+                <th style={{ textAlign: "left", padding: 6 }}>Employee</th>
+                <th style={{ textAlign: "right", padding: 6 }}>Total hrs</th>
+                <th style={{ textAlign: "right", padding: 6 }}>Overtime</th>
+                <th style={{ textAlign: "right", padding: 6 }}>Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summaryData.map((row) => (
+                <tr key={row.employeeId} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 6 }}>{row.employeeName}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{row.totalHours}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{row.overtimeHours || "—"}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{row.pendingHours || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       {pendingCount > 0 && (
         <div style={{ padding: "12px 16px", marginBottom: 20, background: "#fff3cd", border: "1px solid #ffc107", borderRadius: 6 }}>

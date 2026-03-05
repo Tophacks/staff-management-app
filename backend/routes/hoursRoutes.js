@@ -1,93 +1,158 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { requireManager } = require('../middleware/auth');
+const Hours = require('../models/Hours');
+const Staff = require('../models/Staff');
 
-// In-memory: id, staffId, date (YYYY-MM-DD), hours, notes, status: 'pending' | 'approved' | 'disapproved'
-let hoursLog = [
-  { id: 1, staffId: 1, date: '2025-02-01', hours: 8, notes: 'Full day', status: 'approved' },
-  { id: 2, staffId: 2, date: '2025-02-01', hours: 7.5, notes: '', status: 'approved' },
-  { id: 3, staffId: 1, date: '2025-02-02', hours: 8, notes: '', status: 'approved' },
-];
+const router = express.Router();
 
-let nextId = 4;
-
-// Normalize entry so status is always present
-function withStatus(entry) {
-  return { ...entry, status: entry.status || 'pending' };
+function toApi(doc) {
+  const d = doc.toObject ? doc.toObject() : doc;
+  const dateStr = d.date instanceof Date ? d.date.toISOString().slice(0, 10) : String(d.date).slice(0, 10);
+  return {
+    id: d._id.toString(),
+    staffId: d.userId.toString(),
+    date: dateStr,
+    hours: d.totalHours,
+    notes: d.notes || '',
+    status: d.status || 'pending',
+  };
 }
 
-// Router for GET/POST /hours/me (mounted at /hours/me so routes are / and POST /)
 const meRouter = express.Router();
-meRouter.get('/', (req, res) => {
-  const myId = Number(req.user?.id) || req.user?.id;
-  if (myId == null || myId === '') {
-    return res.status(401).json({ error: 'Login required' });
+
+meRouter.get('/', async (req, res) => {
+  try {
+    const myId = req.user?.id;
+    if (!myId) {
+      return res.status(401).json({ error: 'Login required' });
+    }
+
+    const query = { userId: new mongoose.Types.ObjectId(myId) };
+    const { from, to } = req.query;
+    if (from || to) {
+      query.date = {};
+      if (from) query.date.$gte = new Date(from);
+      if (to) query.date.$lte = new Date(to);
+    }
+
+    const list = await Hours.find(query).sort({ date: -1, _id: 1 }).lean();
+    res.json(list.map(toApi));
+  } catch (err) {
+    console.error('GET /hours/me error:', err);
+    res.status(500).json({ error: 'Failed to load hours' });
   }
-  let list = hoursLog.filter((h) => Number(h.staffId) === Number(myId)).map(withStatus);
-  const { from, to } = req.query;
-  if (from) list = list.filter((h) => h.date >= from);
-  if (to) list = list.filter((h) => h.date <= to);
-  list.sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.id - b.id);
-  res.json(list);
-});
-meRouter.post('/', (req, res) => {
-  const { date, hours, notes } = req.body;
-  if (!date || hours == null) {
-    return res.status(400).json({ error: 'date and hours required' });
-  }
-  const entry = {
-    id: nextId++,
-    staffId: req.user.id,
-    date: String(date).slice(0, 10),
-    hours: Number(hours),
-    notes: notes || '',
-    status: 'pending',
-  };
-  hoursLog.push(entry);
-  res.json(entry);
 });
 
-// Router for /hours (GET, POST, PATCH)
-const router = express.Router();
-router.get('/', requireManager, (req, res) => {
-  let list = hoursLog.map(withStatus);
-  const { staffId, from, to, status } = req.query;
-  if (staffId) list = list.filter((h) => Number(h.staffId) === Number(staffId));
-  if (from) list = list.filter((h) => h.date >= from);
-  if (to) list = list.filter((h) => h.date <= to);
-  if (status) list = list.filter((h) => (h.status || 'pending') === status);
-  list.sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.id - b.id);
-  res.json(list);
+meRouter.post('/', async (req, res) => {
+  try {
+    const { date, hours, notes } = req.body;
+    if (!date || hours == null) {
+      return res.status(400).json({ error: 'date and hours required' });
+    }
+
+    const userId = req.user.id;
+    const totalHours = Number(hours);
+    if (isNaN(totalHours) || totalHours < 0) {
+      return res.status(400).json({ error: 'hours must be a non-negative number' });
+    }
+
+    const entry = new Hours({
+      userId,
+      date: new Date(date),
+      totalHours,
+      notes: notes || '',
+      status: 'pending',
+    });
+    await entry.save();
+
+    res.status(201).json(toApi(entry));
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('POST /hours/me error:', err);
+    res.status(500).json({ error: 'Failed to log hours' });
+  }
 });
 
-// PATCH /hours/:id — set status to approved/disapproved (Managers only)
-router.patch('/:id', requireManager, (req, res) => {
-  const id = Number(req.params.id);
-  const { status } = req.body;
-  if (status !== 'approved' && status !== 'disapproved') {
-    return res.status(400).json({ error: 'status must be approved or disapproved' });
+router.get('/', requireManager, async (req, res) => {
+  try {
+    const { staffId, from, to, status } = req.query;
+    const query = {};
+
+    if (staffId) query.userId = new mongoose.Types.ObjectId(staffId);
+    if (from && to) query.date = { $gte: new Date(from), $lte: new Date(to) };
+    else if (from) query.date = { $gte: new Date(from) };
+    else if (to) query.date = { $lte: new Date(to) };
+    if (status) query.status = status;
+
+    const list = await Hours.find(query).sort({ date: -1, _id: 1 }).lean();
+    res.json(list.map((d) => toApi(d)));
+  } catch (err) {
+    console.error('GET /hours error:', err);
+    res.status(500).json({ error: 'Failed to load hours' });
   }
-  const entry = hoursLog.find((h) => h.id === id);
-  if (!entry) return res.status(404).json({ error: 'Hours entry not found' });
-  entry.status = status;
-  res.json(entry);
 });
 
-// POST /hours — add hours for any staff (Managers only)
-router.post('/', requireManager, (req, res) => {
-  const { staffId, date, hours, notes } = req.body;
-  if (staffId == null || !date || hours == null) {
-    return res.status(400).json({ error: 'staffId, date and hours required' });
+router.patch('/:id', requireManager, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (status !== 'approved' && status !== 'disapproved') {
+      return res.status(400).json({ error: 'status must be approved or disapproved' });
+    }
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(404).json({ error: 'Hours entry not found' });
+    }
+
+    const entry = await Hours.findByIdAndUpdate(id, { status }, { new: true });
+    if (!entry) {
+      return res.status(404).json({ error: 'Hours entry not found' });
+    }
+
+    res.json(toApi(entry));
+  } catch (err) {
+    console.error('PATCH /hours/:id error:', err);
+    res.status(500).json({ error: 'Failed to update status' });
   }
-  const entry = {
-    id: nextId++,
-    staffId: Number(staffId),
-    date: String(date).slice(0, 10),
-    hours: Number(hours),
-    notes: notes || '',
-    status: 'approved',
-  };
-  hoursLog.push(entry);
-  res.json(entry);
+});
+
+router.post('/', requireManager, async (req, res) => {
+  try {
+    const { staffId, date, hours, notes } = req.body;
+    if (staffId == null || !date || hours == null) {
+      return res.status(400).json({ error: 'staffId, date and hours required' });
+    }
+
+    if (!mongoose.isValidObjectId(staffId)) {
+      return res.status(400).json({ error: 'Invalid staffId' });
+    }
+
+    const totalHours = Number(hours);
+    if (isNaN(totalHours) || totalHours < 0) {
+      return res.status(400).json({ error: 'hours must be a non-negative number' });
+    }
+
+    const entry = new Hours({
+      userId: staffId,
+      date: new Date(date),
+      totalHours,
+      notes: notes || '',
+      status: 'approved',
+    });
+    await entry.save();
+
+    res.status(201).json(toApi(entry));
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('POST /hours error:', err);
+    res.status(500).json({ error: 'Failed to add hours' });
+  }
 });
 
 module.exports = router;
