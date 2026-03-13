@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { requireManager } = require('../middleware/auth');
 const Staff = require('../models/Staff');
@@ -65,27 +64,6 @@ router.post('/', requireManager, async (req, res) => {
     }
     console.error('POST /staff error:', err);
     res.status(500).json({ error: 'Failed to add staff' });
-  }
-});
-
-const Hours = require('../models/Hours');
-
-router.delete('/:id', requireManager, async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: 'Invalid staff id' });
-    }
-    const staff = await Staff.findById(id);
-    if (!staff) {
-      return res.status(404).json({ error: 'Staff not found' });
-    }
-    await Hours.deleteMany({ userId: id });
-    await Staff.findByIdAndDelete(id);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('DELETE /staff error:', err);
-    res.status(500).json({ error: 'Failed to remove staff' });
   }
 });
 

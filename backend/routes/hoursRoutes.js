@@ -3,8 +3,6 @@ const mongoose = require('mongoose');
 const { requireManager } = require('../middleware/auth');
 const Hours = require('../models/Hours');
 const Staff = require('../models/Staff');
-const { createNotification } = require('../lib/notifications');
-const { sendEmail } = require('../lib/email');
 
 const router = express.Router();
 
@@ -113,27 +111,6 @@ router.patch('/:id', requireManager, async (req, res) => {
     const entry = await Hours.findByIdAndUpdate(id, { status }, { new: true });
     if (!entry) {
       return res.status(404).json({ error: 'Hours entry not found' });
-    }
-
-    const employee = await Staff.findById(entry.userId).lean();
-    if (employee) {
-      const verb = status === 'approved' ? 'approved' : 'disapproved';
-      await createNotification({
-        userId: employee._id.toString(),
-        type: 'hours-status',
-        title: `Hours ${verb}`,
-        message: `Your hours for ${toApi(entry).date} were ${verb}.`,
-        metadata: { hoursId: entry._id.toString(), status },
-      });
-      await sendEmail({
-        to: employee.email,
-        subject: `Your hours were ${verb}`,
-        html: `
-          <p>Hello ${employee.name},</p>
-          <p>Your submitted hours for <strong>${toApi(entry).date}</strong> were <strong>${verb}</strong>.</p>
-          <p>Status: ${status}</p>
-        `,
-      });
     }
 
     res.json(toApi(entry));

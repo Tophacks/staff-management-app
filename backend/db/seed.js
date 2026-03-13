@@ -10,46 +10,9 @@ async function seed() {
 
   const passwordHash = await bcrypt.hash(defaultPassword, 10);
   const staff = await Staff.insertMany([
-    {
-      name: 'Alice',
-      email: 'alice@example.com',
-      role: 'Manager',
-      passwordHash,
-      phone: '555-0101',
-      address: '100 Main St',
-      emergencyContact: { name: 'Eve', phone: '555-0199', relationship: 'Spouse' },
-      department: 'Operations',
-      startDate: new Date('2024-01-15'),
-      salary: 60000,
-      employmentType: 'Full-time',
-      managerNotes: 'Primary manager account.',
-    },
-    {
-      name: 'Bob',
-      email: 'bob@example.com',
-      role: 'Employee',
-      passwordHash,
-      phone: '555-0102',
-      address: '200 Oak Ave',
-      emergencyContact: { name: 'Sam', phone: '555-0188', relationship: 'Parent' },
-      department: 'Sales',
-      startDate: new Date('2024-03-01'),
-      salary: 40000,
-      employmentType: 'Full-time',
-    },
-    {
-      name: 'Charlie',
-      email: 'charlie@example.com',
-      role: 'Employee',
-      passwordHash,
-      phone: '555-0103',
-      address: '300 Pine Rd',
-      emergencyContact: { name: 'Taylor', phone: '555-0177', relationship: 'Sibling' },
-      department: 'Support',
-      startDate: new Date('2024-05-20'),
-      salary: 45000,
-      employmentType: 'Part-time',
-    },
+    { name: 'Alice', email: 'alice@example.com', role: 'Manager', passwordHash, salary: 60000 },
+    { name: 'Bob', email: 'bob@example.com', role: 'Employee', passwordHash, salary: 40000 },
+    { name: 'Charlie', email: 'charlie@example.com', role: 'Employee', passwordHash, salary: 45000 },
   ]);
 
   await Hours.insertMany([
