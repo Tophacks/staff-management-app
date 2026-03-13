@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getHoursMe, addHoursMe } from "../api/staffApi";
+import Badge from "../components/Badge";
+import StatCard from "../components/StatCard";
 
 export default function MyHoursPage() {
   const [hoursLog, setHoursLog] = useState([]);
@@ -10,7 +12,7 @@ export default function MyHoursPage() {
   const [filterTo, setFilterTo] = useState("");
   const [error, setError] = useState("");
 
-  const loadHours = async () => {
+  const loadHours = useCallback(async () => {
     try {
       setError("");
       const params = {};
@@ -22,11 +24,11 @@ export default function MyHoursPage() {
       const msg = err.response?.data?.error || err.response?.status === 401 ? "Please log in again" : err.response?.status === 403 ? "Access denied" : err.message || "Failed to load hours. Is the backend running on port 5000?";
       setError(msg);
     }
-  };
+  }, [filterFrom, filterTo]);
 
   useEffect(() => {
     loadHours();
-  }, [filterFrom, filterTo]);
+  }, [loadHours]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -48,74 +50,126 @@ export default function MyHoursPage() {
   const pendingCount = hoursLog.filter((h) => (h.status || "pending") === "pending").length;
   const approvedCount = hoursLog.filter((h) => h.status === "approved").length;
   const disapprovedCount = hoursLog.filter((h) => h.status === "disapproved").length;
+  const totalLogged = useMemo(
+    () => hoursLog.reduce((sum, entry) => sum + (Number(entry.hours) || 0), 0),
+    [hoursLog]
+  );
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>My Hours</h1>
-
-      <p style={{ marginBottom: 20, color: "#555" }}>
-        Your logged hours are approved or disapproved by your manager. See status in the table below.
-      </p>
-
-      {(approvedCount > 0 || disapprovedCount > 0 || pendingCount > 0) && (
-        <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-          {pendingCount > 0 && <span style={{ padding: "6px 12px", background: "#e2e3e5", borderRadius: 6 }}>Pending: {pendingCount}</span>}
-          {approvedCount > 0 && <span style={{ padding: "6px 12px", background: "#d4edda", color: "#155724", borderRadius: 6 }}>Approved: {approvedCount}</span>}
-          {disapprovedCount > 0 && <span style={{ padding: "6px 12px", background: "#f8d7da", color: "#721c24", borderRadius: 6 }}>Disapproved: {disapprovedCount}</span>}
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
         </div>
       )}
 
-      <h2>Log hours</h2>
-      {error && <p style={{ color: "crimson", marginBottom: 8 }}>{error}</p>}
-      <form onSubmit={handleAdd} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", marginBottom: 24 }}>
-        <label>
-          Date
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ marginLeft: 8, padding: 8 }} />
-        </label>
-        <label>
-          Hours
-          <input type="number" min="0" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} style={{ marginLeft: 8, padding: 8, width: 70 }} />
-        </label>
-        <input placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ padding: 8, width: 140 }} />
-        <button type="submit">Add</button>
-      </form>
-
-      <h2>My hours log</h2>
-      <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <input type="date" placeholder="From" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} style={{ padding: 6 }} />
-        <input type="date" placeholder="To" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} style={{ padding: 6 }} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Total Logged" value={totalLogged.toFixed(1)} hint="Hours currently on your record" tone="navy" icon={<span className="text-lg">🗂️</span>} />
+        <StatCard title="Pending" value={pendingCount} hint="Waiting on manager approval" tone="amber" icon={<span className="text-lg">🟡</span>} />
+        <StatCard title="Approved" value={approvedCount} hint="Ready for payroll processing" tone="green" icon={<span className="text-lg">✅</span>} />
+        <StatCard title="Denied" value={disapprovedCount} hint="Needs review or correction" tone="rose" icon={<span className="text-lg">🔴</span>} />
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "2px solid #ddd" }}>
-            <th style={{ textAlign: "left", padding: 8 }}>Date</th>
-            <th style={{ textAlign: "right", padding: 8 }}>Hours</th>
-            <th style={{ textAlign: "left", padding: 8 }}>Notes</th>
-            <th style={{ textAlign: "left", padding: 8 }}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {hoursLog.map((h) => (
-            <tr key={h.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: 8 }}>{h.date}</td>
-              <td style={{ padding: 8, textAlign: "right" }}>{h.hours}</td>
-              <td style={{ padding: 8 }}>{h.notes || "—"}</td>
-              <td style={{ padding: 8 }}>
-                <span style={{
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                  fontWeight: 500,
-                  background: (h.status || "pending") === "approved" ? "#d4edda" : (h.status || "pending") === "disapproved" ? "#f8d7da" : "#e2e3e5",
-                  color: (h.status || "pending") === "approved" ? "#155724" : (h.status || "pending") === "disapproved" ? "#721c24" : "#383d41",
-                }}>
-                  {(h.status || "pending") === "approved" ? "Approved" : (h.status || "pending") === "disapproved" ? "Disapproved" : "Pending"}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {hoursLog.length === 0 && <p style={{ color: "#666" }}>No hours logged yet.</p>}
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <h2 className="font-['Syne'] text-xl font-semibold text-slate-950">Log New Hours</h2>
+            <p className="mt-1 text-sm text-slate-500">Submit time entries cleanly and keep your approvals moving.</p>
+          </div>
+
+          <form onSubmit={handleAdd} className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                placeholder="Hours"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+            <input
+              placeholder="Add notes for context"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+            />
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md"
+            >
+              Submit hours
+            </button>
+          </form>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="font-['Syne'] text-xl font-semibold text-slate-950">Hours Activity</h2>
+              <p className="mt-1 text-sm text-slate-500">Track approvals and view your recent submissions.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <input
+                type="date"
+                value={filterFrom}
+                onChange={(e) => setFilterFrom(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+              <input
+                type="date"
+                value={filterTo}
+                onChange={(e) => setFilterTo(e.target.value)}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+          </div>
+
+          {hoursLog.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-sm text-slate-500">
+              No hours logged yet. Submit your first entry to start building your timeline.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 text-right font-medium">Hours</th>
+                    <th className="px-4 py-3 font-medium">Notes</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hoursLog.map((entry) => (
+                    <tr key={entry.id} className="border-b border-slate-100 transition hover:bg-slate-50">
+                      <td className="px-4 py-4 font-medium text-slate-900">{entry.date}</td>
+                      <td className="px-4 py-4 text-right text-slate-700">{entry.hours}</td>
+                      <td className="px-4 py-4 text-slate-600">{entry.notes || "No notes added"}</td>
+                      <td className="px-4 py-4">
+                        <Badge status={entry.status || "pending"}>
+                          {(entry.status || "pending") === "approved"
+                            ? "Approved"
+                            : (entry.status || "pending") === "disapproved"
+                              ? "Denied"
+                              : "Pending"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

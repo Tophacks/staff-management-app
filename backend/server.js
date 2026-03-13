@@ -5,6 +5,7 @@ const cors = require('cors');
 const { connectDB } = require('./db/connect');
 const { seed } = require('./db/seed');
 const { auth, requireManager } = require('./middleware/auth');
+const { startCommunicationJobs } = require('./jobs/communicationJobs');
 
 const app = express();
 app.use(cors());
@@ -16,6 +17,10 @@ app.get('/', (req, res) => {
 
 app.use('/auth', require('./routes/authRoutes'));
 app.use('/staff', auth, require('./routes/staffRoutes'));
+app.use('/api/employees', auth, require('./routes/employeeRoutes'));
+app.use('/api/announcements', auth, require('./routes/announcementRoutes'));
+app.use('/api/notifications', auth, require('./routes/notificationRoutes'));
+app.use('/shifts', auth, require('./routes/shiftRoutes'));
 const hoursRoutes = require('./routes/hoursRoutes');
 app.use('/hours/me', auth, hoursRoutes.meRouter);
 app.use('/hours', auth, hoursRoutes);
@@ -29,6 +34,7 @@ async function start() {
   try {
     await connectDB();
     await seed();
+    startCommunicationJobs();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT} at http://localhost:${PORT}/`);
     });
